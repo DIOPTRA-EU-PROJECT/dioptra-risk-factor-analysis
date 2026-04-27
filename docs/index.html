@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DIOPTRA API Documentation</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/swagger-ui-dist/swagger-ui.css"
+    />
+    <style>
+      body { margin: 0; padding: 0; }
+      .topbar { 
+        background-color: #003399; 
+        padding: 10px 20px;
+        display: flex;
+        align-items: center;
+      }
+      .topbar h1 { 
+        color: white; 
+        margin: 0;
+        font-family: Arial, sans-serif;
+        font-size: 1.2em;
+      }
+      .eu-badge {
+        color: #FFD700;
+        margin-left: 10px;
+        font-family: Arial, sans-serif;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <h1>DIOPTRA API Gateway</h1>
+      <span class="eu-badge">★ EU Horizon Europe Project</span>
+    </div>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js">
+    </script>
+    <script>
+      SwaggerUIBundle({
+        url: "swagger.yml",
+        dom_id: '#swagger-ui',
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIBundle.SwaggerUIStandalonePreset
+        ],
+        layout: "BaseLayout",
+        deepLinking: true,
+        showExtensions: true,
+        showCommonExtensions: true
+      })
+    </script>
+  </body>
+</html>

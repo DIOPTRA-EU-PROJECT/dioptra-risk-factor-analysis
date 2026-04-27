@@ -1,0 +1,136 @@
+# ================================================
+# DIOPTRA Curation & Storage
+# Docker Compose Example Configuration
+# ================================================
+# 1. Copy to docker-compose.yml
+# 2. Configure .env file
+# 3. Run: docker-compose up -d
+# ================================================
+
+version: '3.5'
+
+services:
+
+  # -----------------------------------------------
+  # Elasticsearch - Clinical Data Storage
+  # -----------------------------------------------
+  elasticsearch:
+    container_name: your-elasticsearch
+    image: your-registry/dioptra-elasticsearch:latest
+    build:
+      context: ./elasticsearch
+    restart: unless-stopped
+    environment:
+      ELASTIC_USERNAME: ${ELASTIC_USERNAME}
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      ELASTIC_CLUSTER_NAME: ${ELASTIC_CLUSTER_NAME}
+      ELASTIC_NODE_NAME: ${ELASTIC_NODE_NAME}
+      ELASTIC_INIT_MASTER_NODE: ${ELASTIC_INIT_MASTER_NODE}
+      ES_JAVA_OPTS: -Xmx${ELASTICSEARCH_HEAP} -Xms${ELASTICSEARCH_HEAP}
+      bootstrap.memory_lock: "true"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+    networks:
+      - dioptra-net
+    ports:
+      - "${ELASTICSEARCH_REQUEST_PORT}:9200"
+      - "${ELASTICSEARCH_CLUSTER_PORT}:9300"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  # -----------------------------------------------
+  # Kibana - Data Visualization
+  # -----------------------------------------------
+  kibana:
+    container_name: your-kibana
+    image: your-registry/dioptra-kibana:latest
+    build:
+      context: ./kibana
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_USERNAME: ${ELASTIC_USERNAME}
+      ELASTICSEARCH_PASSWORD: ${ELASTIC_PASSWORD}
+      ELASTICSEARCH_HOST_PORT: ${ELASTIC_NODE_NAME}:9200
+    networks:
+      - dioptra-net
+    ports:
+      - "${KIBANA_PORT}:5601"
+    depends_on:
+      - elasticsearch
+
+  # -----------------------------------------------
+  # Logstash - Data Ingestion
+  # -----------------------------------------------
+  logstash:
+    container_name: your-logstash
+    image: your-registry/dioptra-logstash:latest
+    build:
+      context: ./logstash
+    restart: unless-stopped
+    volumes:
+      - ./logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
+      - ./logstash/pipeline/:/usr/share/logstash/pipeline/
+      - logstash-files:/logstash_file/
+    networks:
+      - dioptra-net
+    environment:
+      ELASTIC_USERNAME: ${ELASTIC_USERNAME}
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      ELASTICSEARCH_HOST_PORT: ${ELASTIC_NODE_NAME}:9200
+      LS_JAVA_OPTS: "-Xmx${LOGSTASH_HEAP} -Xms${LOGSTASH_HEAP}"
+    depends_on:
+      - elasticsearch
+
+  # -----------------------------------------------
+  # API Gateway - REST API
+  # -----------------------------------------------
+  api_gw:
+    container_name: your-api-gateway
+    image: your-registry/dioptra-api-gw:latest
+    build:
+      context: ./api_gw
+    restart: unless-stopped
+    volumes:
+      - logstash-files:/logstash_file/
+      - type: bind
+        source: ${API_CONFIG_PATH}
+        target: /api_gw/config/api_gw_config.py
+    networks:
+      - dioptra-net
+    ports:
+      - "${API_GW_PORT}:80"
+    environment:
+      ELASTIC_USERNAME: ${ELASTIC_USERNAME}
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD}
+      ELASTICSEARCH_HOST_PORT: ${ELASTIC_NODE_NAME}:9200
+      LOGSTASH_HOST: ${LOGSTASH_HOST}
+      SECRET_KEY: ${SECRET_KEY}
+      KEYCLOAK_SERVER_URL: ${KEYCLOAK_SERVER_URL}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID}
+      KEYCLOAK_REALM_NAME: ${KEYCLOAK_REALM_NAME}
+      KEYCLOAK_CLIENT_SECRET_KEY: ${KEYCLOAK_CLIENT_SECRET_KEY}
+      RAM_KEYCLOAK_CLIENT_ID: ${RAM_KEYCLOAK_CLIENT_ID}
+      RAM_KEYCLOAK_CLIENT_SECRET_KEY: ${RAM_KEYCLOAK_CLIENT_SECRET_KEY}
+      MOBILE_KEYCLOAK_CLIENT_ID: ${MOBILE_KEYCLOAK_CLIENT_ID}
+      MOBILE_KEYCLOAK_CLIENT_SECRET_KEY: ${MOBILE_KEYCLOAK_CLIENT_SECRET_KEY}
+      AI_MODEL_KEYCLOAK_CLIENT_ID: ${AI_MODEL_KEYCLOAK_CLIENT_ID}
+      AI_MODEL_KEYCLOAK_CLIENT_SECRET_KEY: ${AI_MODEL_KEYCLOAK_CLIENT_SECRET_KEY}
+    depends_on:
+      - elasticsearch
+
+# -----------------------------------------------
+# Volumes
+# -----------------------------------------------
+volumes:
+  elasticsearch-data:
+  logstash-files:
+
+# -----------------------------------------------
+# Networks
+# -----------------------------------------------
+networks:
+  dioptra-net:
+    driver: bridge

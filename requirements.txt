@@ -1,0 +1,9 @@
+flask
+flask-restful
+flask-swagger-ui
+requests
+elasticsearch==7.13.0
+pandas
+python-keycloak
+gunicorn
+gevent

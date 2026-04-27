@@ -1,0 +1,1553 @@
+openapi: 3.0.0
+
+info:
+  title: DIOPTRA API Gateway
+  description: |
+    REST API Gateway for the **DIOPTRA** project, funded under the 
+    EU Horizon Europe research and innovation programme.
+    
+    This API provides secure, role-based access to clinical research 
+    data collected across European clinical sites participating in 
+    the DIOPTRA colorectal cancer screening study.
+    
+    ## Authentication
+    All endpoints require a valid Bearer token issued by the 
+    project Keycloak identity server.
+    
+    ## Pagination
+    For large datasets, the API supports two pagination strategies:
+    - **Standard pagination**: Use `page` and `page_size` parameters
+    - **Deep pagination**: Use `search_after` cursor for datasets 
+      exceeding 5000 records
+    
+    ## Clinical Site Access
+    Data access is automatically restricted to the authenticated 
+    user's clinical site based on their Keycloak group membership.
+    
+  version: "1.0.0"
+  contact:
+    name: Netcompany
+    url: https://netcompany.com/
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+    
+servers:
+  - url: https://your-api-server/api/v1
+    description: Production server
+  - url: http://localhost:8282/api/v1
+    description: Local development server
+
+security:
+  - BearerAuth: []
+
+# ============================================================
+# COMPONENTS
+# ============================================================
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Keycloak JWT Bearer token.
+        Obtain from your Keycloak instance using your 
+        client credentials.
+
+  schemas:
+
+    # --------------------------------------------------------
+    # Generic
+    # --------------------------------------------------------
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+      example:
+        error: "User does not have a valid group"
+
+    Message:
+      type: object
+      properties:
+        message:
+          type: string
+      example:
+        message: "Operation completed successfully"
+
+    # --------------------------------------------------------
+    # Pagination
+    # --------------------------------------------------------
+    PaginatedResponse:
+      type: object
+      properties:
+        total_hits:
+          type: integer
+          description: Total number of matching records
+          example: 1500
+        results:
+          type: array
+          items:
+            type: object
+          description: Array of clinical records
+        search_after:
+          type: array
+          nullable: true
+          description: |
+            Pagination cursor for next page.
+            Pass this value as search_after in the next request.
+            Null if no more pages available.
+          example: ["2024-01-15T10:30:00.000Z", "abc123"]
+
+    # --------------------------------------------------------
+    # Patient
+    # --------------------------------------------------------
+    PatientSummary:
+      type: object
+      properties:
+        dioptra_id:
+          type: string
+          description: Unique patient identifier
+        password:
+          type: string
+          nullable: true
+          description: Mobile application access password
+        dioptra_study:
+          type: array
+          items:
+            type: integer
+          description: List of study IDs the patient participates in
+          example: [1, 4]
+        sex:
+          type: string
+          nullable: true
+          description: Patient sex
+          example: "M"
+        diagnosis:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: integer
+              - type: string
+          description: |
+            Diagnosis per study number.
+    PatientInfo:
+      type: object
+      properties:
+        dioptra_id:
+          type: string
+          description: Unique patient identifier
+          example: "DIO-12345"
+        clinical_site:
+          type: string
+          description: Clinical site where patient is registered
+          example: "site_a"
+        password:
+          type: string
+          nullable: true
+          description: Mobile application access password
+
+    # --------------------------------------------------------
+    # Assessment
+    # --------------------------------------------------------
+    AssessmentData:
+      type: object
+      properties:
+        lifestyle:
+          type: string
+          nullable: true
+          description: Lifestyle recommendation
+        diet:
+          type: string
+          nullable: true
+          description: Diet recommendation
+        supplements:
+          type: string
+          nullable: true
+          description: Supplements recommendation
+        stress:
+          type: string
+          nullable: true
+          description: Stress management recommendation
+
+    AssessmentRequest:
+      type: object
+      required:
+        - dioptra_id
+        - clinical_site
+        - password
+        - createdAt
+        - data
+      properties:
+        dioptra_id:
+          type: string
+          description: Unique patient identifier
+        clinical_site:
+          type: string
+          description: Clinical site identifier
+        password:
+          type: string
+          description: Patient mobile app password
+        createdAt:
+          type: string
+          format: date-time
+          description: Assessment creation timestamp
+        data:
+          $ref: '#/components/schemas/AssessmentData'
+
+    # --------------------------------------------------------
+    # Mobile
+    # --------------------------------------------------------
+    MobileInsertRequest:
+      type: object
+      required:
+        - dioptra_id
+        - clinical_site
+        - password
+        - date
+      properties:
+        dioptra_id:
+          type: string
+          description: Unique patient identifier
+        clinical_site:
+          type: string
+          description: Clinical site identifier
+        password:
+          type: string
+          description: Patient mobile app password
+        date:
+          type: string
+          format: date
+          description: Record date
+      additionalProperties: true
+      description: |
+        Additional lifestyle and questionnaire fields 
+        can be included beyond the required fields.
+
+    # --------------------------------------------------------
+    # AI Analysis
+    # --------------------------------------------------------
+    AIUpdateRequest:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          description: |
+            Fields to add or update in the AI analysis document.
+            Any valid field name and value can be provided.
+          additionalProperties: true
+
+    # --------------------------------------------------------
+    # Ingestion
+    # --------------------------------------------------------
+    IngestionItem:
+      type: object
+      required:
+        - dioptra_id
+      properties:
+        dioptra_id:
+          type: string
+          description: Unique patient identifier
+      additionalProperties: true
+      description: |
+        Clinical data object for ingestion.
+        Include any clinical data fields alongside dioptra_id.
+
+    IngestionResult:
+      type: object
+      properties:
+        index:
+          type: integer
+          description: Position in the submitted batch
+        id:
+          type: string
+          description: Document ID in Elasticsearch
+        result:
+          type: string
+          enum: [created, updated]
+        error:
+          type: string
+          description: Error message if ingestion failed
+
+    # --------------------------------------------------------
+    # Administration
+    # --------------------------------------------------------
+    StudyUpdateRequest:
+      type: object
+      required:
+        - dioptra_ids
+      properties:
+        dioptra_ids:
+          type: array
+          items:
+            type: string
+          description: |
+            List of patient IDs to EXCLUDE from the 
+            study identifier update operation.
+
+    StudyUpdateResponse:
+      type: object
+      properties:
+        updated_docs:
+          type: integer
+          description: Number of documents updated
+        updated_dioptra_ids:
+          type: array
+          items:
+            type: string
+          description: Patient IDs that were updated
+        excluded_dioptra_ids:
+          type: array
+          items:
+            type: string
+          description: Patient IDs that were excluded
+
+    DuplicateDeleteResponse:
+      type: object
+      properties:
+        deleted_docs:
+          type: integer
+          description: Number of documents deleted
+        dioptra_ids:
+          type: array
+          items:
+            type: string
+          description: Patient IDs for which duplicates were removed
+
+    GroupAssignmentResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        total_documents_updated:
+          type: integer
+          description: Number of documents assigned
+        failed_updates:
+          type: integer
+          description: Number of failed assignments
+
+    UploadResponse:
+      type: object
+      properties:
+        result:
+          type: string
+          enum: [Success, Error]
+        details:
+          type: object
+          properties:
+            filename:
+              type: string
+            errors:
+              type: array
+              items:
+                type: string
+
+    ProteinUploadResponse:
+      type: object
+      properties:
+        result:
+          type: string
+          enum: [Success]
+        details:
+          type: object
+          properties:
+            filename:
+              type: string
+            path:
+              type: string
+
+# ============================================================
+# TAGS
+# ============================================================
+tags:
+  - name: Clinical Data
+    description: |
+      Endpoints for accessing clinical research data.
+      Restricted to authenticated clinical site users.
+  - name: Patient Management
+    description: |
+      Endpoints for patient listing, filtering and lookup.
+  - name: Mobile
+    description: |
+      Endpoints for the DIOPTRA patient mobile application.
+  - name: RAM Module
+    description: |
+      Research Access Module endpoints for authorized researchers.
+  - name: AI Module
+    description: |
+      Endpoints for AI model data exchange and analysis results.
+  - name: BIO Module
+    description: |
+      Biospecimen and sample management data export.
+  - name: Data Ingestion
+    description: |
+      Endpoints for uploading and ingesting clinical data files.
+  - name: Administration
+    description: |
+      Administrative endpoints for data management operations.
+  - name: System
+    description: |
+      System health and connectivity endpoints.
+
+# ============================================================
+# PATHS
+# ============================================================
+paths:
+
+  # ----------------------------------------------------------
+  # System
+  # ----------------------------------------------------------
+  /hello:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Returns a simple health check response.
+      security: []
+      responses:
+        '200':
+          description: Service is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Hello, world"
+
+  /helloAuth:
+    get:
+      tags: [System]
+      summary: Authenticated health check
+      description: |
+        Returns a health check response requiring 
+        valid authentication.
+      responses:
+        '200':
+          description: Authenticated service is running
+        '401':
+          description: Unauthorized
+
+  # ----------------------------------------------------------
+  # Clinical Data
+  # ----------------------------------------------------------
+  /get_data:
+    get:
+      tags: [Clinical Data]
+      summary: Get paginated clinical data
+      description: |
+        Returns paginated clinical records for the authenticated 
+        user's clinical site.
+        
+        **Pagination Strategy:**
+        - For datasets < 5000 records: use `page` + `page_size`
+        - For datasets >= 5000 records: use `search_after` cursor
+        
+        The `search_after` value is returned in each response 
+        and should be passed in the next request to retrieve 
+        the following page.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number (standard pagination)
+          example: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+          description: Number of records per page
+          example: 100
+        - name: search_after
+          in: query
+          schema:
+            type: string
+          description: |
+            JSON-encoded sort cursor from previous response.
+            Example: ["2024-01-15T10:30:00.000Z","abc123"]
+        - name: dioptra_study
+          in: query
+          schema:
+            type: string
+          description: Filter records by study identifier
+          example: "1"
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+        '401':
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /get_patient_records:
+    get:
+      tags: [Clinical Data]
+      summary: Get records for a specific patient
+      description: |
+        Returns all clinical records for a specific patient 
+        identified by dioptra_id.
+        Supports deep pagination for patients with many records.
+      parameters:
+        - name: dioptra_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Unique patient identifier
+          example: "DIO-12345"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+          description: Records per page
+        - name: search_after
+          in: query
+          schema:
+            type: string
+          description: Deep pagination cursor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /get_categories:
+    get:
+      tags: [Clinical Data]
+      summary: Get data categories
+      description: |
+        Returns all available data categories and 
+        their definitions used in the DIOPTRA platform.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+        '401':
+          description: Unauthorized
+
+  /get_var_names:
+    get:
+      tags: [Clinical Data]
+      summary: Get variable names
+      description: |
+        Returns all variable names with their 
+        human-readable descriptions and metadata.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+        '401':
+          description: Unauthorized
+
+  # ----------------------------------------------------------
+  # Patient Management
+  # ----------------------------------------------------------
+  /get_patients_list:
+    get:
+      tags: [Patient Management]
+      summary: Get list of unique patients
+      description: |
+        Returns a paginated list of unique patients with:
+        - Study participation history
+        - Diagnosis per study
+        - Mobile app password
+        
+        Uses composite aggregation for efficient 
+        pagination over large patient lists.
+      parameters:
+        - name: agg_size
+          in: query
+          schema:
+            type: integer
+            default: 10000
+            minimum: 1
+            maximum: 10000
+          description: Number of patients per page
+        - name: after_key
+          in: query
+          schema:
+            type: string
+          description: |
+            JSON-encoded pagination cursor from 
+            previous response after_key field
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patients:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PatientSummary'
+                  after_key:
+                    type: object
+                    nullable: true
+                    description: Cursor for retrieving next page
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+
+  /patients/filter:
+    get:
+      tags: [Patient Management]
+      summary: Get filtered patient list
+      description: |
+        Returns patients matching the provided filter criteria.
+        Supports filtering by sex, study, diagnosis, 
+        or specific patient ID.
+        
+        **Diagnosis codes:**
+        - 1 = Healthy
+        - 2 = Non-advanced Adenoma  
+        - 3 = Advanced Adenoma
+        - 4 = CRC (Colorectal Cancer)
+      parameters:
+        - name: sex
+          in: query
+          schema:
+            type: string
+          description: Filter by patient sex
+          example: "M"
+        - name: dioptra_study
+          in: query
+          schema:
+            type: string
+          description: Filter by study identifier
+          example: "1"
+        - name: diagnosis
+          in: query
+          schema:
+            type: string
+          description: Filter by diagnosis code (1-4)
+          example: "2"
+        - name: dioptra_id
+          in: query
+          schema:
+            type: string
+          description: Filter by specific patient ID
+        - name: agg_size
+          in: query
+          schema:
+            type: integer
+            default: 10000
+          description: Number of results per page
+        - name: after_key
+          in: query
+          schema:
+            type: string
+          description: Pagination cursor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patients:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PatientSummary'
+                  after_key:
+                    type: object
+                    nullable: true
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+
+  /info/{dioptra_id}:
+    get:
+      tags: [Patient Management]
+      summary: Get patient site information
+      description: |
+        Finds which clinical site a patient is registered at
+        and retrieves their mobile application password.
+        Searches across all clinical sites.
+      parameters:
+        - name: dioptra_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique patient identifier
+          example: "DIO-12345"
+      responses:
+        '200':
+          description: Patient found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientInfo'
+        '404':
+          description: Patient not found in any clinical site
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Database connection unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /check_dioptra_id:
+    get:
+      tags: [Patient Management]
+      summary: Validate patient credentials
+      description: |
+        Checks if a patient ID exists in the specified 
+        clinical site and validates the provided password.
+      parameters:
+        - name: clinical_site
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Clinical site identifier
+        - name: dioptra_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Unique patient identifier
+        - name: password
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Patient mobile app password
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists:
+                    type: boolean
+                    description: |
+                      True if patient exists and 
+                      password is valid
+        '500':
+          description: Internal server error
+
+  /delete:
+    delete:
+      tags: [Patient Management]
+      summary: Delete records by filter
+      description: |
+        Deletes clinical records matching the provided 
+        filter criteria.
+        
+        **At least one filter parameter must be provided.**
+        
+        Only deletes records within the authenticated 
+        user's clinical site.
+      parameters:
+        - name: dioptra_id
+          in: query
+          schema:
+            type: string
+          description: Filter by patient ID
+        - name: dioptra_study
+          in: query
+          schema:
+            type: string
+          description: Filter by study identifier
+        - name: tissue_sample_num
+          in: query
+          schema:
+            type: string
+          description: Filter by tissue sample number
+        - name: colon_time_point
+          in: query
+          schema:
+            type: string
+          description: Filter by colon time point
+      responses:
+        '200':
+          description: Records deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          description: No filter parameters provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No matching records found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '401':
+          description: Unauthorized
+
+  # ----------------------------------------------------------
+  # Data Ingestion
+  # ----------------------------------------------------------
+  /upload:
+    post:
+      tags: [Data Ingestion]
+      summary: Upload clinical data file
+      description: |
+        Uploads a pipe-delimited (|) CSV file containing 
+        clinical data for ingestion.
+        
+        The file is validated before being passed to the 
+        Logstash ingestion pipeline.
+        
+        **File format:** Pipe-delimited CSV (`|` separator)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Pipe-delimited CSV file
+      responses:
+        '200':
+          description: Upload result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+              examples:
+                success:
+                  value:
+                    result: "Success"
+                    details:
+                      filename: "data_upload.csv"
+                error:
+                  value:
+                    result: "Error"
+                    details:
+                      - "Row 5: Invalid value for field X"
+        '400':
+          description: No file provided
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+
+  /rfa_data:
+    post:
+      tags: [RAM Module]
+      summary: Ingest AI analysis data
+      description: |
+        Ingests one or more analysis result documents 
+        into the AI analysis index.
+        
+        Accepts either:
+        - A **single JSON object**
+        - A **list of JSON objects** (batch ingestion)
+        
+        Each object must include `dioptra_id`.
+        If a document with the same `dioptra_id` already 
+        exists, it will be updated.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/IngestionItem'
+                - type: array
+                  items:
+                    $ref: '#/components/schemas/IngestionItem'
+            examples:
+              single:
+                summary: Single record
+                value:
+                  dioptra_id: "DIO-12345"
+                  sex: "M"
+                  bmi: 24.5
+              batch:
+                summary: Batch of records
+                value:
+                  - dioptra_id: "DIO-12345"
+                    sex: "M"
+                  - dioptra_id: "DIO-67890"
+                    sex: "F"
+      responses:
+        '200':
+          description: Document updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionResult'
+        '201':
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionResult'
+        '207':
+          description: Multi-status response for batch ingestion
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IngestionResult'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /protein-files/upload:
+    post:
+      tags: [Data Ingestion]
+      summary: Upload protein data file
+      description: |
+        Uploads a CSV file containing protein data.
+        If a file with the same name already exists, 
+        it will be replaced.
+        
+        **File must have .csv extension.**
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - filename
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV file to upload
+                filename:
+                  type: string
+                  description: Target filename (must end with .csv)
+                  example: "protein_data_2024.csv"
+      responses:
+        '200':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProteinUploadResponse'
+        '400':
+          description: Invalid file or filename
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+
+  /protein-files/download-all:
+    get:
+      tags: [Data Ingestion]
+      summary: Download all protein files
+      description: |
+        Returns all available protein data files 
+        packaged as a single ZIP archive.
+      responses:
+        '200':
+          description: ZIP archive containing all protein files
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: No protein files found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+
+  # ----------------------------------------------------------
+  # Mobile Module
+  # ----------------------------------------------------------
+  /mobile_get_data:
+    get:
+      tags: [Mobile]
+      summary: Get mobile module data
+      description: |
+        Returns lifestyle and questionnaire data for 
+        mobile application users.
+        
+        Filters automatically for mobile study records only.
+        When `dioptra_id` is provided, returns only the 
+        earliest record for that patient.
+      parameters:
+        - name: clinical_site
+          in: query
+          schema:
+            type: string
+          description: Filter by specific clinical site
+        - name: dioptra_id
+          in: query
+          schema:
+            type: string
+          description: |
+            Get data for specific patient.
+            Returns earliest record only.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: search_after
+          in: query
+          schema:
+            type: string
+          description: Deep pagination cursor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_hits:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      type: object
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+
+  /mobile_post_data:
+    post:
+      tags: [Mobile]
+      summary: Submit mobile questionnaire data
+      description: |
+        Inserts lifestyle and questionnaire data submitted 
+        from the patient mobile application.
+        
+        Validates patient ID and password before insertion.
+        Creates a unique record identified by the combination 
+        of `dioptra_id` and `date`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileInsertRequest'
+            example:
+              dioptra_id: "DIO-12345"
+              clinical_site: "site_a"
+              password: "patient_password"
+              date: "2024-01-15"
+      responses:
+        '201':
+          description: Data inserted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          description: |
+            Validation error - missing fields, invalid 
+            clinical site, or patient not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+
+  /assessments:
+    post:
+      tags: [Mobile]
+      summary: Submit lifestyle assessment
+      description: |
+        Updates the oldest unassigned record for a patient 
+        with lifestyle assessment recommendations.
+        
+        Finds the earliest record without existing 
+        recommendations and updates it with the provided 
+        assessment data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentRequest'
+            example:
+              dioptra_id: "DIO-12345"
+              clinical_site: "site_a"
+              password: "patient_password"
+              createdAt: "2024-01-15T10:30:00Z"
+              data:
+                lifestyle: "Increase physical activity"
+                diet: "Reduce processed food intake"
+                supplements: "Consider Vitamin D"
+                stress: "Practice mindfulness daily"
+      responses:
+        '200':
+          description: Assessment updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: No available unassigned record found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Database unavailable
+
+  # ----------------------------------------------------------
+  # RAM Module
+  # ----------------------------------------------------------
+  /ram_get_data:
+    get:
+      tags: [RAM Module]
+      summary: Get data via RAM module
+      description: |
+        Returns clinical data across all or specific 
+        clinical sites.
+        
+        Accessible only with RAM module authentication.
+        Supports filtering by clinical site, patient ID, 
+        and study identifier.
+      parameters:
+        - name: clinical_site
+          in: query
+          schema:
+            type: string
+          description: Filter by specific clinical site
+        - name: dioptra_id
+          in: query
+          schema:
+            type: string
+          description: Filter by patient ID
+        - name: dioptra_study
+          in: query
+          schema:
+            type: string
+          description: Filter by study identifier
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: search_after
+          in: query
+          schema:
+            type: string
+          description: Deep pagination cursor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_hits:
+                    type: integer
+                    description: Total records across all sites
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        index:
+                          type: string
+                          description: Clinical site identifier
+                        total_hits:
+                          type: integer
+                        results:
+                          type: array
+                          items:
+                            type: object
+                        search_after:
+                          type: array
+                          nullable: true
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+
+  # ----------------------------------------------------------
+  # AI Module
+  # ----------------------------------------------------------
+  /ai_data:
+    get:
+      tags: [AI Module]
+      summary: Get AI analysis data
+      description: |
+        Returns paginated records from the AI analysis index.
+        Supports filtering by patient ID and study identifier.
+      parameters:
+        - name: dioptra_id
+          in: query
+          schema:
+            type: string
+          description: Filter by patient ID
+        - name: dioptra_study
+          in: query
+          schema:
+            type: string
+          description: Filter by study identifier
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: search_after
+          in: query
+          schema:
+            type: string
+          description: Deep pagination cursor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedResponse'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+
+    post:
+      tags: [AI Module]
+      summary: Update AI analysis document
+      description: |
+        Updates an existing document in the AI analysis 
+        index by adding or overwriting specified fields.
+        
+        A timestamp is automatically added to track 
+        when the AI update was performed.
+      parameters:
+        - name: dioptra_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Patient ID of document to update
+          example: "DIO-12345"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIUpdateRequest'
+            example:
+              data:
+                prediction_score: 0.87
+                risk_category: "high"
+                model_version: "v2.1"
+      responses:
+        '200':
+          description: Document updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  id:
+                    type: string
+        '400':
+          description: Missing dioptra_id parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+
+  # ----------------------------------------------------------
+  # BIO Module
+  # ----------------------------------------------------------
+  /bio_get_data:
+    get:
+      tags: [BIO Module]
+      summary: Export biospecimen data as CSV
+      description: |
+        Returns biospecimen and sample quality data as a 
+        downloadable CSV file.
+        
+        The CSV includes a Clinical Site column as the 
+        first column, followed by biospecimen-specific 
+        data fields.
+        
+        For large datasets, automatically uses scroll 
+        API for complete data retrieval.
+      parameters:
+        - name: clinical_site
+          in: query
+          schema:
+            type: string
+          description: |
+            Filter by specific clinical site.
+            If omitted, exports data from all sites.
+        - name: dioptra_id
+          in: query
+          schema:
+            type: string
+          description: Filter by patient ID
+        - name: dioptra_study
+          in: query
+          schema:
+            type: string
+          description: Filter by study identifier
+      responses:
+        '200':
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+
+  # ----------------------------------------------------------
+  # Administration
+  # ----------------------------------------------------------
+  /assign_groups:
+    post:
+      tags: [Administration]
+      summary: Assign case/control groups
+      description: |
+        Randomly assigns case or control group assessment 
+        to patients, stratified by diagnosis group.
+        
+        Only processes patients without an existing 
+        group assignment.
+        
+        Assignment is balanced within each diagnosis group:
+        - ~50% assigned as **case**
+        - ~50% assigned as **control**
+      responses:
+        '200':
+          description: Assignment completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupAssignmentResponse'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal server error
+
+  /delete_duplicates:
+    post:
+      tags: [Administration]
+      summary: Remove duplicate study records
+      description: |
+        Identifies and removes duplicate records 
+        
+        Removes the study 3 records, keeping study 4.
+      parameters:
+        - name: clinical_site
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Clinical site to process
+      responses:
+        '200':
+          description: Deletion completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DuplicateDeleteResponse'
+        '400':
+          description: Missing clinical_site parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '503':
+          description: Database unavailable
+
+  /update_study:
+    post:
+      tags: [Administration]
+      summary: Update study identifiers
+      description: |
+        Updates the study identifier from 4 to 3 for 
+        all patients NOT included in the provided 
+        exclusion list.
+        
+        Used to manage study cohort transitions.
+      parameters:
+        - name: clinical_site
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Clinical site to process
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudyUpdateRequest'
+            example:
+              dioptra_ids:
+                - "DIO-12345"
+                - "DIO-67890"
+      responses:
+        '200':
+          description: Update completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudyUpdateResponse'
+        '400':
+          description: Missing or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+        '503':
+          description: Database unavailable
