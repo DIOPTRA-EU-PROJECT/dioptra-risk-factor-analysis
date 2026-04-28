@@ -1,51 +1,31 @@
-# DIOPTRA Software Backend
+# Risk and Protective Factor Analysis for the DIOPTRA Project
 [![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.19737796-blue.svg)](https://doi.org/10.5281/zenodo.19737796)
 
-Secure clinical data curation, storage and API gateway infrastructure for the DIOPTRA platform.
-- Secure clinical data ingestion via Logstash pipelines
-- Elasticsearch-based clinical data storage
-- REST API Gateway for controlled data access
-- Multi-role authentication via Keycloak
-- Mobile application data endpoints
-- AI module data exchange interfaces
-- Biospecimen data export capabilities
 
 ## Overview
+In this EU DIOPTRA project, we monitor, collect, clean and merge data from all DIOPTRA partner clinical sites. The main objective of this analysis is to identify risk and protective factors for colorectal cancer, mainly using statistical methods.
 
-The DIOPTRA Software Backend (DIOPTRA Curation & Storage) provides the secure 
-infrastructure for ingesting, storing, and accessing clinical 
-research data collected across all DIOPTRA partner clinical sites.
+This repository contains the analysis pipeline used in the notebook `Risk_and_protective_factor_analysis.ipynb`.
 
-### API Gateway
-REST API providing controlled, authenticated access to 
-clinical data through multiple role-based modules:
+### Data Organization
 
-### Data Storage
-- Elasticsearch-based clinical data storage
-- Per-clinical-site index isolation
-- Kibana dashboard for data visualization
+- Retrieve all the data from DIOPTRA dashboard using Postman.
+- Monitor the data for possible issues.
+- Automatically save all the clinical site excel data files to a shared Google Drive folder using google API.
 
-### Data Ingestion
-- Logstash pipelines for standardized data ingestion
-- Pipe-delimited CSV format support
-- Automated validation before ingestion
+### Data Cleaning
+- Clean the data per clinical site.
+- Test different merged datasets.
+- Select the most appropriate merged dataset for the analysis.
 
-## API Documentation
-
-Full API documentation available at:
-- [swagger.yml](./docs/swagger.yml)
-- [Interactive API Docs](https://dioptra-eu-project.github.io/dioptra-software-backend/)
-
-## Prerequisites
-
-- Docker >= 20.x
-- Docker Compose >= 2.x
-- Elasticsearch 7.x
-- Keycloak instance
+### Statistical Analysis
+- Use descriptive statistics, data visualization and exploratory data analysis (EDA) to examine the data structure.
+- Apply univariate data analysis.
+- Apply multivariate data analysis to identify the final risk and protective factors.
 
 ## Authors & Copyright
 
-Developed by **Netcompany** for the DIOPTRA Project.
+Developed by **University of Ioannina (Medlab)** for the DIOPTRA Project.
 
 Copyright © 2023-2026 Netcompany
 
