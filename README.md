@@ -8,7 +8,6 @@ In this EU DIOPTRA project, we monitor, collect, clean and merge data from all D
 This repository contains the analysis pipeline used in the notebook `Risk_and_protective_factor_analysis.ipynb`.
 
 ### Data Organization
-
 - Retrieve all the data from DIOPTRA dashboard using Postman.
 - Monitor the data for possible issues.
 - Automatically save all the clinical site excel data files to a shared Google Drive folder using google API.
@@ -23,12 +22,8 @@ This repository contains the analysis pipeline used in the notebook `Risk_and_pr
 - Apply univariate data analysis.
 - Apply multivariate data analysis to identify the final risk and protective factors.
 
-## Authors & Copyright
-
-Developed by **University of Ioannina (Medlab)** for the DIOPTRA Project.
-
-Copyright © 2023-2026 Netcompany
+## Author
+Developed by **Periklis Papias, University of Ioannina (Medlab)** for the DIOPTRA Project.
 
 ## License
-
 This project is licensed under the Apache License 2.0.
