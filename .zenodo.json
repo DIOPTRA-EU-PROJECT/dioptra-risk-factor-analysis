@@ -1,18 +1,18 @@
 {
-  "title": "DIOPTRA Software Backend",
-  "description": "Open-source API Gateway and storage infrastructure configuration for the DIOPTRA clinical research platform.",
+  "title": "Risk and Protective Factor Analysis for the DIOPTRA Project",
+  "description": "Data organization, data cleaning and data analysis for the DIOPTRA project",
   "upload_type": "software",
   "access_right": "open",
   "license": "Apache-2.0",
   "creators": [
     {
-      "name": "NETCOMPANY",
+      "name": "University of Ioannina (Medlab)",
       "affiliation": "DIOPTRA Consortium"
     }
   ],
   "keywords": [
     "clinical data",
-    "API gateway",
+    "risk factors",
     "Horizon Europe",
     "DIOPTRA",
     "colorectal cancer"
