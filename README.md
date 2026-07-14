@@ -1,5 +1,5 @@
 # Risk and Protective Factor Analysis for the DIOPTRA Project
-[![DOI](https://zenodo.org/badge/1222578299.svg?1)](https://doi.org/10.5281/zenodo.19851939)
+[![DOI](https://zenodo.org/badge/1222578299.svg?2)](https://doi.org/10.5281/zenodo.19851939)
 
 
 ## Overview
