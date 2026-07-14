@@ -1,6 +1,5 @@
 # Risk and Protective Factor Analysis for the DIOPTRA Project
-[![DOI](https://zenodo.org/badge/1222578299.svg?2)](https://doi.org/10.5281/zenodo.19851939)
-
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19851940.svg)](https://doi.org/10.5281/zenodo.19851940)
 
 ## Overview
 In this EU DIOPTRA project, we monitor, collect, clean and merge data from all DIOPTRA partner clinical sites. The main objective of this analysis is to identify risk and protective factors for colorectal cancer, mainly using statistical methods.
